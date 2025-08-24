@@ -1,0 +1,231 @@
+import json
+import os
+from datetime import datetime
+
+
+class Book:
+    def __init__(self, book_id, title, author, year, copies):
+        self.book_id = book_id
+        self.title = title
+        self.author = author
+        self.year = year
+        self.copies = copies
+        self.borrowed = 0
+
+    def available_copies(self):
+        return self.copies - self.borrowed
+
+    def borrow(self):
+        if self.available_copies() > 0:
+            self.borrowed += 1
+            return True
+        return False
+
+    def return_book(self):
+        if self.borrowed > 0:
+            self.borrowed -= 1
+            return True
+        return False
+
+    def to_dict(self):
+        return {
+            "book_id": self.book_id,
+            "title": self.title,
+            "author": self.author,
+            "year": self.year,
+            "copies": self.copies,
+            "borrowed": self.borrowed,
+        }
+
+    @staticmethod
+    def from_dict(data):
+        book = Book(
+            data["book_id"],
+            data["title"],
+            data["author"],
+            data["year"],
+            data["copies"],
+        )
+        book.borrowed = data["borrowed"]
+        return book
+
+
+class User:
+    def __init__(self, user_id, name):
+        self.user_id = user_id
+        self.name = name
+        self.borrowed_books = []
+
+    def borrow_book(self, book_id):
+        self.borrowed_books.append({"book_id": book_id, "date": datetime.now().isoformat()})
+
+    def return_book(self, book_id):
+        self.borrowed_books = [b for b in self.borrowed_books if b["book_id"] != book_id]
+
+    def to_dict(self):
+        return {
+            "user_id": self.user_id,
+            "name": self.name,
+            "borrowed_books": self.borrowed_books,
+        }
+
+    @staticmethod
+    def from_dict(data):
+        user = User(data["user_id"], data["name"])
+        user.borrowed_books = data["borrowed_books"]
+        return user
+
+
+class Library:
+    def __init__(self, books_file="books.json", users_file="users.json"):
+        self.books_file = books_file
+        self.users_file = users_file
+        self.books = {}
+        self.users = {}
+        self.load_data()
+
+    def add_book(self, book):
+        self.books[book.book_id] = book
+        self.save_data()
+        print(f"📚 Book '{book.title}' added successfully!")
+
+    def add_user(self, user):
+        self.users[user.user_id] = user
+        self.save_data()
+        print(f"👤 User '{user.name}' registered successfully!")
+
+    def search_book(self, keyword):
+        result = [book for book in self.books.values()
+                  if keyword.lower() in book.title.lower() or keyword.lower() in book.author.lower()]
+        return result
+
+    def borrow_book(self, user_id, book_id):
+        user = self.users.get(user_id)
+        book = self.books.get(book_id)
+
+        if not user:
+            print("⚠ User not found!")
+            return
+        if not book:
+            print("⚠ Book not found!")
+            return
+
+        if book.borrow():
+            user.borrow_book(book_id)
+            self.save_data()
+            print(f"✅ '{book.title}' borrowed by {user.name}")
+        else:
+            print("❌ No available copies to borrow!")
+
+    def return_book(self, user_id, book_id):
+        user = self.users.get(user_id)
+        book = self.books.get(book_id)
+
+        if not user or not book:
+            print("⚠ User/Book not found!")
+            return
+
+        if book.return_book():
+            user.return_book(book_id)
+            self.save_data()
+            print(f"🔄 '{book.title}' returned by {user.name}")
+        else:
+            print("⚠ Error in returning book!")
+
+    def view_books(self):
+        if not self.books:
+            print("📭 No books in library yet!")
+            return
+        print("\n=== 📖 Library Books ===")
+        for book in self.books.values():
+            print(f"ID:{book.book_id} | {book.title} by {book.author} ({book.year}) "
+                  f"[Available: {book.available_copies()}/{book.copies}]")
+
+    def view_users(self):
+        if not self.users:
+            print("👥 No users registered yet!")
+            return
+        print("\n=== 👤 Registered Users ===")
+        for user in self.users.values():
+            print(f"ID:{user.user_id} | Name: {user.name} | Borrowed Books: {len(user.borrowed_books)}")
+
+    def save_data(self):
+        with open(self.books_file, "w") as f:
+            json.dump([book.to_dict() for book in self.books.values()], f, indent=4)
+        with open(self.users_file, "w") as f:
+            json.dump([user.to_dict() for user in self.users.values()], f, indent=4)
+
+    def load_data(self):
+        if os.path.exists(self.books_file):
+            with open(self.books_file, "r") as f:
+                data = json.load(f)
+                self.books = {b["book_id"]: Book.from_dict(b) for b in data}
+        if os.path.exists(self.users_file):
+            with open(self.users_file, "r") as f:
+                data = json.load(f)
+                self.users = {u["user_id"]: User.from_dict(u) for u in data}
+
+
+def main():
+    library = Library()
+
+    while True:
+        print("\n======= 📚 LIBRARY MANAGEMENT =======")
+        print("1. Add Book")
+        print("2. Add User")
+        print("3. View Books")
+        print("4. View Users")
+        print("5. Search Book")
+        print("6. Borrow Book")
+        print("7. Return Book")
+        print("8. Exit")
+        choice = input("Enter choice: ")
+
+        if choice == "1":
+            book_id = input("Enter Book ID: ")
+            title = input("Enter Book Title: ")
+            author = input("Enter Author: ")
+            year = input("Enter Year: ")
+            copies = int(input("Enter Copies: "))
+            library.add_book(Book(book_id, title, author, year, copies))
+
+        elif choice == "2":
+            user_id = input("Enter User ID: ")
+            name = input("Enter User Name: ")
+            library.add_user(User(user_id, name))
+
+        elif choice == "3":
+            library.view_books()
+
+        elif choice == "4":
+            library.view_users()
+
+        elif choice == "5":
+            keyword = input("Enter keyword to search: ")
+            results = library.search_book(keyword)
+            if results:
+                print("\n🔍 Search Results:")
+                for book in results:
+                    print(f"{book.book_id} - {book.title} by {book.author} ({book.year})")
+            else:
+                print("⚠ No books found!")
+
+        elif choice == "6":
+            user_id = input("Enter User ID: ")
+            book_id = input("Enter Book ID: ")
+            library.borrow_book(user_id, book_id)
+
+        elif choice == "7":
+            user_id = input("Enter User ID: ")
+            book_id = input("Enter Book ID: ")
+            library.return_book(user_id, book_id)
+
+        elif choice == "8":
+            print("👋 Exiting Library System. Data saved.")
+            break
+        else:
+            print("⚠ Invalid choice, try again!")
+
+
+if __name__ == "__main__":
+    main()
